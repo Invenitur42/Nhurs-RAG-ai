@@ -4,6 +4,9 @@ Upload documents and ask questions against them. Answers come from retrieved chu
 
 Stack: **FastAPI**, **Postgres + pgvector**, **OpenAI embeddings**, **Next.js**.
 
+**Live demo (browser preview):** [Open Doc Chat](https://invenitur42.github.io/portfolio-live-demos/rag/)  
+Sample docs + retrieval UI in the browser. Full pipeline (embeddings / pgvector / OpenAI) is in this repo.
+
 [Open in Codespaces](https://codespaces.new/Invenitur42/Nhurs-RAG-ai)
 
 ---
