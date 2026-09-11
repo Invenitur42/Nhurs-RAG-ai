@@ -8,7 +8,7 @@ settings = get_settings()
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Full-stack RAG application for chatting with your documents",
+    description="Upload docs and chat against them using RAG",
     version="0.1.0",
 )
 
@@ -20,7 +20,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(documents.router, prefix=settings.API_V1_PREFIX)
 app.include_router(chat.router, prefix=settings.API_V1_PREFIX)
@@ -28,13 +27,9 @@ app.include_router(chat.router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "rag-knowledge-base"}
+    return {"status": "ok"}
 
 
 @app.get("/")
 def root():
-    return {
-        "message": "RAG Knowledge Base API",
-        "docs": "/docs",
-        "version": "0.1.0",
-    }
+    return {"docs": "/docs", "version": "0.1.0"}
