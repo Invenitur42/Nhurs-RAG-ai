@@ -5,10 +5,10 @@ A full-stack **Retrieval-Augmented Generation** application that lets users uplo
 **Target audience:** Full-stack developer interviews (junior → mid level with ~2 years experience).
 
 This project demonstrates real production patterns used in modern AI applications:
-- Document ingestion pipeline (chunking, embedding, storage)
-- Vector search with pgvector
-- Source citations in answers
-- User authentication & multi-tenancy (each user has isolated documents)
+- Document ingestion pipeline (parsing → chunking → embedding → storage)
+- Vector similarity search with pgvector
+- Grounded LLM answers with source citations
+- User authentication & multi-tenancy (documents isolated per user)
 - Clean separation of frontend / backend / AI layer
 
 ---
@@ -17,28 +17,31 @@ This project demonstrates real production patterns used in modern AI application
 
 - [x] Project structure & documentation
 - [x] User auth (register / login / JWT)
-- [x] Document models + upload endpoint (stub)
-- [x] Chat endpoint with retrieval placeholder
+- [x] Document models + upload endpoint
+- [x] **Full document processing pipeline** (PDF, TXT, MD, DOCX)
+- [x] **Chunking with overlap**
+- [x] **OpenAI embeddings stored in pgvector**
+- [x] **Real cosine similarity search**
+- [x] **Grounded LLM answer generation**
+- [x] Source chunks returned for citations
 - [x] Docker Compose (Postgres + pgvector + Redis)
 - [x] Frontend package scaffolding (Next.js 15 + TypeScript)
-- [ ] Full document parsing + chunking + embedding pipeline
-- [ ] Real vector similarity search
-- [ ] LLM answer generation + streaming
-- [ ] Frontend pages (auth, dashboard, chat UI)
-- [ ] Source citations in the UI
+- [ ] Frontend pages (auth, dashboard, chat UI with citations)
+- [ ] Streaming responses
+- [ ] Background task queue for large documents (optional)
 
 ---
 
 ## Tech Stack
 
-| Layer       | Technology                          |
-|-------------|-------------------------------------|
+| Layer       | Technology                                      |
+|-------------|-------------------------------------------------|
 | Frontend    | Next.js 15 (App Router) + TypeScript + Tailwind |
-| Backend     | FastAPI + Python 3.11+              |
-| AI / RAG    | OpenAI embeddings + chat models (LangChain ready) |
-| Database    | PostgreSQL + pgvector               |
-| Auth        | JWT (python-jose + passlib)         |
-| Infra       | Docker + docker-compose             |
+| Backend     | FastAPI + Python 3.11+                          |
+| AI / RAG    | OpenAI embeddings (`text-embedding-3-small`) + chat models |
+| Database    | PostgreSQL + pgvector                           |
+| Auth        | JWT (python-jose + passlib)                     |
+| Infra       | Docker + docker-compose                         |
 
 ---
 
@@ -49,28 +52,28 @@ User → Next.js Frontend
          ↓
       FastAPI Backend
          ├── Auth (JWT)
-         ├── Documents (upload / list / delete)
-         ├── RAG service (retrieve + generate)
-         └── Chat endpoint
+         ├── Documents (upload → parse → chunk → embed → store)
+         ├── RAG service (embed query → vector search → LLM)
+         └── Chat endpoint (returns answer + sources)
          ↓
-PostgreSQL (users, documents) + pgvector (embeddings)
+PostgreSQL (users, documents metadata) + pgvector (1536-dim embeddings)
 ```
 
 ---
 
-## Current Backend API
+## Backend API
 
-| Method | Endpoint                    | Description                |
-|--------|-----------------------------|----------------------------|
-| POST   | `/api/v1/auth/register`     | Create account             |
-| POST   | `/api/v1/auth/login`        | Get JWT                    |
-| GET    | `/api/v1/auth/me`           | Current user               |
-| GET    | `/api/v1/documents/`        | List my documents          |
-| POST   | `/api/v1/documents/upload`  | Upload a document          |
-| DELETE | `/api/v1/documents/{id}`    | Delete a document          |
-| POST   | `/api/v1/chat/`             | Ask a question (RAG)       |
+| Method | Endpoint                    | Description                          |
+|--------|-----------------------------|--------------------------------------|
+| POST   | `/api/v1/auth/register`     | Create account                       |
+| POST   | `/api/v1/auth/login`        | Get JWT                              |
+| GET    | `/api/v1/auth/me`           | Current user                         |
+| GET    | `/api/v1/documents/`        | List my documents                    |
+| POST   | `/api/v1/documents/upload`  | Upload + fully process a document    |
+| DELETE | `/api/v1/documents/{id}`    | Delete a document                    |
+| POST   | `/api/v1/chat/`             | Ask a question (real RAG)            |
 
-Interactive docs available at `http://localhost:8000/docs` once the backend is running.
+Interactive docs: `http://localhost:8000/docs`
 
 ---
 
@@ -90,18 +93,25 @@ cd rag-knowledge-base
 docker-compose up -d
 ```
 
-### 2. Backend
+### 2. Backend setup
 
 ```bash
 cd backend
-cp .env.example .env          # add your OPENAI_API_KEY and SECRET_KEY
+cp .env.example .env
+# Edit .env → set OPENAI_API_KEY and a strong SECRET_KEY
+
 python -m venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Create tables + enable pgvector extension
+python -m app.db.init_db
+
+# Run the API
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Frontend (basic scaffold)
+### 3. Frontend (scaffold ready)
 
 ```bash
 cd frontend
@@ -111,48 +121,35 @@ npm run dev
 
 ---
 
-## Project Structure
+## How the RAG Pipeline Works
 
-```
-rag-knowledge-base/
-├── backend/
-│   ├── app/
-│   │   ├── api/          # auth, documents, chat routers
-│   │   ├── core/         # config, security
-│   │   ├── db/           # SQLAlchemy session
-│   │   ├── models/       # User, Document, DocumentChunk
-│   │   ├── schemas/      # Pydantic models
-│   │   ├── services/     # RAG logic
-│   │   └── main.py
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/
-│   ├── package.json
-│   └── README.md
-├── docker-compose.yml
-└── README.md
-```
+1. **Upload** → file is saved as a `Document` with status `processing`
+2. **Extract** → text is pulled from PDF / DOCX / TXT / MD
+3. **Chunk** → `RecursiveCharacterTextSplitter` (configurable size + overlap)
+4. **Embed** → OpenAI `text-embedding-3-small` (batched)
+5. **Store** → chunks + 1536-dim vectors written to `document_chunks` via pgvector
+6. **Query** → question is embedded → cosine similarity search (scoped to the user)
+7. **Generate** → top-k chunks are injected into a grounded prompt → LLM answers
+8. **Return** → answer + source chunks (for UI citations)
 
 ---
 
 ## Interview Talking Points
 
-- Why hybrid search (vector + keyword) often beats pure vector search
-- Chunk size / overlap trade-offs and their effect on retrieval quality
-- Multi-tenancy: how documents are isolated per user
-- Streaming responses and perceived latency
-- How you would evaluate RAG quality (faithfulness, context relevance)
-- Why you chose FastAPI + Next.js for this stack
+- Why pure vector search can fail on exact keyword matches and how hybrid search helps
+- Impact of chunk size and overlap on retrieval quality and context window usage
+- Multi-tenancy: every query is filtered by `owner_id` so users never see each other’s data
+- Trade-offs of synchronous processing vs background workers for large files
+- How you would add evaluation (faithfulness / relevance scores) later
+- Why FastAPI + Next.js is a strong full-stack choice for AI products
 
 ---
 
-## Next Development Steps
+## Next Steps
 
-1. Implement real document parsing + chunking + embedding
-2. Wire vector search in the RAG service
-3. Call the LLM and return proper answers + sources
-4. Build the Next.js UI (auth pages, document dashboard, chat with citations)
-5. Add background task for heavy processing (optional)
+1. Build the Next.js UI (login, document dashboard, chat with source citations)
+2. Add streaming responses for better UX
+3. Optional: move heavy document processing to a background worker (Celery / ARQ / Redis)
 
 ---
 
