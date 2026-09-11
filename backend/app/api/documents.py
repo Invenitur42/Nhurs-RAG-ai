@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.document import Document
 from app.schemas.document import DocumentResponse
+from app.services.document_processor import process_and_store_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -37,13 +38,15 @@ async def upload_document(
         "text/markdown",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
-    if file.content_type not in allowed and not file.filename.endswith((".txt", ".md", ".pdf", ".docx")):
+    if file.content_type not in allowed and not (
+        file.filename and file.filename.lower().endswith((".txt", ".md", ".pdf", ".docx"))
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported file type. Allowed: PDF, TXT, MD, DOCX",
         )
 
-    # Create document record (processing pipeline will be added next)
+    # Create document record first
     doc = Document(
         owner_id=current_user.id,
         filename=file.filename or "unnamed",
@@ -54,15 +57,19 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
 
-    # TODO: background task to parse, chunk, embed
-    # For now we just mark as ready after reading content placeholder
+    # Read file content and run the full RAG ingestion pipeline
     content = await file.read()
-    # In a real implementation we would call a service here
 
-    doc.status = "ready"
-    db.commit()
+    try:
+        process_and_store_document(db=db, document=doc, raw_content=content)
+    except Exception as exc:
+        # Document status is already set to "failed" inside the processor
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to process document: {str(exc)}",
+        ) from exc
+
     db.refresh(doc)
-
     return doc
 
 
