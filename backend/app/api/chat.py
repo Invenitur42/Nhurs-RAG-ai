@@ -4,12 +4,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.models.document import Document, DocumentChunk
 from app.schemas.document import ChatRequest, ChatResponse, SourceChunk
-from app.core.config import get_settings
+from app.services.rag import answer_question
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-settings = get_settings()
 
 
 @router.post("/", response_model=ChatResponse)
@@ -19,52 +17,34 @@ def chat(
     db: Session = Depends(get_db),
 ):
     """
-    Simple RAG endpoint.
-
-    Current implementation is a placeholder that returns a structured response.
-    Next iteration will:
+    Full RAG endpoint:
     1. Embed the question
-    2. Perform similarity search over the user's chunks
-    3. Build a prompt with retrieved context
-    4. Call the LLM and return answer + sources
+    2. Retrieve top-k most similar chunks (pgvector)
+    3. Generate a grounded answer with the LLM
+    4. Return answer + source chunks for citations
     """
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    # Scope to current user's documents
-    query = (
-        db.query(DocumentChunk)
-        .join(Document)
-        .filter(Document.owner_id == current_user.id, Document.status == "ready")
-    )
-
-    if body.document_ids:
-        query = query.filter(Document.id.in_(body.document_ids))
-
-    # Placeholder: take first few chunks (real version uses vector search)
-    chunks = query.limit(settings.TOP_K).all()
+    try:
+        answer, chunks = answer_question(
+            db=db,
+            user_id=current_user.id,
+            question=body.question.strip(),
+            document_ids=body.document_ids,
+        )
+    except RuntimeError as exc:
+        # Most commonly missing OPENAI_API_KEY
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     sources = [
         SourceChunk(
             document_id=c.document_id,
-            filename=c.document.filename,
-            content=c.content[:500],
+            filename=c.document.filename if c.document else "unknown",
+            content=c.content[:600],
             chunk_index=c.chunk_index,
         )
         for c in chunks
     ]
-
-    # Placeholder answer – replace with real LLM call later
-    if not sources:
-        answer = (
-            "I don't have any documents to answer from yet. "
-            "Please upload some files first."
-        )
-    else:
-        answer = (
-            f"(Placeholder RAG response) Based on {len(sources)} retrieved chunks "
-            f"from your documents, here is a summary related to: '{body.question}'.\n\n"
-            "Real LLM generation will be wired in the next step."
-        )
 
     return ChatResponse(answer=answer, sources=sources)
