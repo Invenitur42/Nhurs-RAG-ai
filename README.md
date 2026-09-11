@@ -25,8 +25,7 @@ This project demonstrates real production patterns used in modern AI application
 - [x] **Grounded LLM answer generation**
 - [x] Source chunks returned for citations
 - [x] Docker Compose (Postgres + pgvector + Redis)
-- [x] Frontend package scaffolding (Next.js 15 + TypeScript)
-- [ ] Frontend pages (auth, dashboard, chat UI with citations)
+- [x] **Frontend UI** (login, register, dashboard, chat with citations)
 - [ ] Streaming responses
 - [ ] Background task queue for large documents (optional)
 
@@ -77,6 +76,17 @@ Interactive docs: `http://localhost:8000/docs`
 
 ---
 
+## Frontend Pages
+
+| Route        | Description                            |
+|--------------|----------------------------------------|
+| `/login`     | Sign in                                |
+| `/register`  | Create account                         |
+| `/dashboard` | List / upload / delete documents       |
+| `/chat`      | Chat UI with source citations          |
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -93,7 +103,7 @@ cd rag-knowledge-base
 docker-compose up -d
 ```
 
-### 2. Backend setup
+### 2. Backend
 
 ```bash
 cd backend
@@ -111,13 +121,15 @@ python -m app.db.init_db
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Frontend (scaffold ready)
+### 3. Frontend
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
@@ -130,7 +142,7 @@ npm run dev
 5. **Store** → chunks + 1536-dim vectors written to `document_chunks` via pgvector
 6. **Query** → question is embedded → cosine similarity search (scoped to the user)
 7. **Generate** → top-k chunks are injected into a grounded prompt → LLM answers
-8. **Return** → answer + source chunks (for UI citations)
+8. **Return** → answer + source chunks (shown as citations in the UI)
 
 ---
 
@@ -145,11 +157,12 @@ npm run dev
 
 ---
 
-## Next Steps
+## Optional Next Improvements
 
-1. Build the Next.js UI (login, document dashboard, chat with source citations)
-2. Add streaming responses for better UX
-3. Optional: move heavy document processing to a background worker (Celery / ARQ / Redis)
+- Streaming responses for better UX
+- Background worker (Celery / ARQ) for large document processing
+- Hybrid search (vector + BM25)
+- Answer evaluation metrics
 
 ---
 
