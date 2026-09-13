@@ -1,4 +1,4 @@
-# Nhurs RAG DB
+# Nhurs RAG ai
 
 Upload documents and ask questions against them. Answers come from retrieved chunks (RAG), not from the model guessing.
 
