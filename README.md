@@ -59,14 +59,14 @@ Optional bootstrap: `bash scripts/dev.sh`
 5. Response includes the sources so you can check them in the UI  
 
 ---
-
+<!--
 ## Notes / possible next steps
 
 - Chunk size and overlap matter a lot for quality  
 - Large uploads would be better off a background worker  
 - Hybrid search (keyword + vector) helps when people use exact terms  
 - Streaming the answer would improve the chat feel  
-
+-->
 ---
 
 ## Deploy
